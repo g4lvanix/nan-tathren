@@ -30,26 +30,34 @@ chp = scipy.signal.chirp(tchp,fstart,tstop,fstop)
 txsig = np.concatenate((chp,np.zeros(int(maxsamp-chp.size))))
 t = np.arange(txsig.size)*Ts
 
-rxsig = echo1_amp*np.roll(txsig,echo1_delay)
-rxsig += echo2_amp*np.roll(txsig,echo2_delay)
+rxsig_clean = echo1_amp*np.roll(txsig,echo1_delay)
+rxsig_clean += echo2_amp*np.roll(txsig,echo2_delay)
 
 # apply AWGN to RX signal
-rxsig = rxsig #+ np.random.randn(rxsig.size)/np.sqrt(2)
+rxsig = rxsig_clean + np.random.randn(rxsig_clean.size)/np.sqrt(2)
 
 # cross correlation of chirp with RX signal yields the echo location in the
 # time series data even in noisy conditions
 # this is the application of a matched filter
-txsig_fft = np.fft.rfft(txsig)
-rxsig_fft = np.fft.rfft(rxsig)
-corr_fft = rxsig_fft/txsig_fft
-corr = np.fft.irfft(corr_fft)
+# in this case an FFT is used as it is much easier to make use of the convolution
+# property of the DFT for a large number of samples
+# as it turns out scipy already has a function that does this
+# also take the absolute value as we're only interested in finding peaks
+corr = np.abs(scipy.signal.fftconvolve(rxsig,chp[::-1],mode="valid"))
 
-#corr = np.correlate(rxsig,chp,mode='same')
-tcorr = np.arange(corr.size)*Ts
+# this idea came from an ESO website: http://www.eso.org/projects/dfs/papers/jitter99/node7.html
+# first we calculate the mean and (estimated) standard deviation and then clip
+# the cross correlations signal so that only signals with a deviation greater
+# than K times the standard deviation remain, i.e.:
+# for sample in corr: if sample < m+K*s: sample = 0
+m = np.average(corr)
+s = np.std(corr,ddof=1)
+K = 6
+corr = (corr - (m+K*s)).clip(min=0)
 
 # analyze cross correlation data
-peaks = np.array(scipy.signal.argrelmax(np.abs(corr),order=int(chp.size/4)))
-times = (peaks-int(chp.size/2))*Ts / 2
+peaks = corr.nonzero()[0]
+times = peaks*Ts / 2
 distances = c*times
 
 print(peaks,times,distances)
@@ -58,22 +66,23 @@ print(peaks,times,distances)
 #scipy.io.wavfile.write('chp.wav',fs,np.array(chp,dtype='float32'))
 #scipy.io.wavfile.write('rxsig.wav',fs,np.array(rxsig,dtype='float32'))
 
-plt.figure()
-plt.subplot(211)
-plt.hold(True)
-plt.plot(np.abs(rxsig_fft))
-plt.plot(np.abs(txsig_fft))
-plt.grid()
-plt.subplot(212)
-plt.plot(np.abs(corr_fft))
-plt.grid()
-
+# this is only needed for plotting the cross correlation on the same time scale
+# as the TX & RX signals
+tcorr = np.arange(corr.size)*Ts
 # and some plotting
 plt.figure()
 plt.subplot(211)
-plt.plot(t,rxsig,t,txsig)
+plt.hold(True)
+plt.title("Time domain signals")
+plt.plot(t,rxsig,label="RX signal + noise")
+plt.plot(t,txsig,label="TX signal")
+plt.plot(t,rxsig_clean,label="RX signal, clean")
+plt.xlabel("Time [s]")
+plt.legend()
 plt.grid()
 plt.subplot(212)
+plt.title("Cross correlation signal after clipping")
 plt.plot(tcorr,np.abs(corr))
+plt.xlabel("Time [s]")
 plt.grid()
 plt.show()
