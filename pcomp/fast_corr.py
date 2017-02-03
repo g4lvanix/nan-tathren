@@ -44,6 +44,7 @@ rxsig = rxsig_clean + np.random.randn(rxsig_clean.size)/np.sqrt(2)
 # as it turns out scipy already has a function that does this
 # also take the absolute value as we're only interested in finding peaks
 corr = np.abs(scipy.signal.fftconvolve(rxsig,chp[::-1],mode="valid"))
+#corr = np.abs(np.convolve(rxsig,chp[::-1],mode='valid'))
 
 # this idea came from an ESO website: http://www.eso.org/projects/dfs/papers/jitter99/node7.html
 # first we calculate the mean and (estimated) standard deviation and then clip
@@ -53,14 +54,14 @@ corr = np.abs(scipy.signal.fftconvolve(rxsig,chp[::-1],mode="valid"))
 m = np.average(corr)
 s = np.std(corr,ddof=1)
 K = 6
-corr = (corr - (m+K*s)).clip(min=0)
+peaks = (corr - (m+K*s)).clip(min=0).nonzero()[0]
 
 # analyze cross correlation data
-peaks = corr.nonzero()[0]
-times = peaks*Ts / 2
-distances = c*times
+distances = c*Ts / 2 * peaks
+print(distances)
 
-print(peaks,times,distances)
+highlight = np.zeros(corr.size)
+highlight[peaks] = corr[peaks]
 
 # write the resulting signals to wave files for demonstration
 #scipy.io.wavfile.write('chp.wav',fs,np.array(chp,dtype='float32'))
@@ -81,8 +82,10 @@ plt.xlabel("Time [s]")
 plt.legend()
 plt.grid()
 plt.subplot(212)
-plt.title("Cross correlation signal after clipping")
-plt.plot(tcorr,np.abs(corr))
+plt.title("Cross correlation signal")
+plt.hold(True)
+plt.plot(tcorr,corr)
+plt.plot(tcorr,highlight,'ro')
 plt.xlabel("Time [s]")
 plt.grid()
 plt.show()
