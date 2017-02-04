@@ -17,10 +17,8 @@ fstart = 0
 fstop = 20e3
 maxsamp = 3*fs
 # echo parameters
-echo1_delay = int(0.5*fs)
-echo2_delay = int(0.52*fs)
-echo1_amp = 0.1
-echo2_amp = 0.1
+delays = np.array([0.5,0.52,2.2])*fs
+amps = np.array([0.1,0.1,0.1])
 
 # generate frequency chirp signal
 tchp = np.linspace(tstart,tstop,tstop*fs)
@@ -30,8 +28,9 @@ chp = scipy.signal.chirp(tchp,fstart,tstop,fstop)
 txsig = np.concatenate((chp,np.zeros(int(maxsamp-chp.size))))
 t = np.arange(txsig.size)*Ts
 
-rxsig_clean = echo1_amp*np.roll(txsig,echo1_delay)
-rxsig_clean += echo2_amp*np.roll(txsig,echo2_delay)
+rxsig_clean = np.zeros(txsig.shape)
+for i in range(amps.size):
+	rxsig_clean += amps[i]*np.roll(txsig,int(delays[i]))
 
 # apply AWGN to RX signal
 rxsig = rxsig_clean + np.random.randn(rxsig_clean.size)/np.sqrt(2)
@@ -53,7 +52,7 @@ corr = np.abs(scipy.signal.fftconvolve(rxsig,chp[::-1],mode="valid"))
 # for sample in corr: if sample < m+K*s: sample = 0
 m = np.average(corr)
 s = np.std(corr,ddof=1)
-K = 6
+K = 8
 peaks = (corr - (m+K*s)).clip(min=0).nonzero()[0]
 
 # analyze cross correlation data
